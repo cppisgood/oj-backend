@@ -1,10 +1,9 @@
 use axum::{
     extract::Query,
-    routing::{get, post},
     AddExtensionLayer, Router,
 };
 use axum_csrf::{CsrfConfig, CsrfLayer, CsrfToken};
-use oj_backend::{auth::login, config, db};
+use oj_backend::{auth, config, db, user};
 use std::{collections::HashMap, net::SocketAddr};
 use tower_cookies::{self, CookieManagerLayer};
 
@@ -14,9 +13,12 @@ async fn main() {
     let mongo = db::get_mongo_client().await.database("oj-test");
     let session_store = db::get_redis_store();
 
+    let app = Router::new().nest("/auth", auth::get_router());
+    let app = app.merge(Router::new().nest("/user", user::get_router()));
+
+
     let app = Router::new()
-        .route("/test", get(test_handler))
-        .route("/api/login", post(login::login_handler))
+        .nest("/api", app)
         .layer(AddExtensionLayer::new(config))
         .layer(AddExtensionLayer::new(mongo))
         .layer(AddExtensionLayer::new(session_store))
@@ -31,6 +33,7 @@ async fn main() {
         .unwrap()
 }
 
+#[allow(dead_code)]
 async fn test_handler(token: CsrfToken, Query(params): Query<HashMap<String, String>>) {
     println!("{:?}", params);
     if let Some(csrftoken) = params.get("token") {

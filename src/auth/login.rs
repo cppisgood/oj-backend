@@ -1,6 +1,5 @@
 use crate::utils;
 use async_redis_session::RedisSessionStore;
-use async_session::{Session, SessionStore};
 use axum::{
     extract::Extension,
     http::StatusCode,
@@ -12,9 +11,7 @@ use chrono::Duration;
 use config::Config;
 use mongodb::Database;
 use serde::Deserialize;
-use serde_json::json;
-use time;
-use tower_cookies::{Cookie, Cookies};
+use tower_cookies::Cookies;
 
 #[derive(Deserialize, Debug)]
 pub struct LoginUser {
@@ -49,52 +46,31 @@ pub async fn login_handler(
             if utils::verify_password(&user.password, &password_hash) {
                 let ttl = if user.remember_me.eq(&Some(true)) {
                     Duration::days(config.get_int("session_long_ttl").unwrap_or(30))
-                        .to_std()
-                        .unwrap()
                 } else {
                     Duration::hours(config.get_int("session_ttl").unwrap_or(24))
-                        .to_std()
-                        .unwrap()
-                };
+                }
+                .to_std()
+                .unwrap();
 
-                let session = {
-                    let mut session = Session::new();
-                    session.insert("username", &user.username).unwrap();
-                    session.expire_in(ttl);
-                    session
-                };
-                let session_cookie = {
-                    let cookie = session_store.store_session(session).await.unwrap().unwrap();
-                    let mut cookie = Cookie::new("session_id", cookie);
-                    cookie.set_max_age(time::Duration::try_from(ttl).unwrap());
-                    cookie
-                };
+                let session = utils::gen_session(&[("username", &user.username)], ttl);
+                println!("{}", user.username);
+
+                let session_cookie =
+                    utils::sotre_session_and_gen_cookie(session_store.clone(), session, ttl).await;
                 cookie.add(session_cookie);
-                println!("{:?}", session_store.count().await);
+                println!("{:?} {:?}", user, session_store.count().await);
 
-                (
-                    StatusCode::OK,
-                    Json(json!({
-                        "code": "0",
-                        "msg": "succsess"
-                    })),
-                )
+                (StatusCode::OK, utils::gen_response(0, "succsess"))
             } else {
                 (
                     StatusCode::UNAUTHORIZED,
-                    Json(json!({
-                        "code": "2",
-                        "msg": "wrong password"
-                    })),
+                    utils::gen_response(2, "wrong password"),
                 )
             }
         }
         None => (
             StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "code": "1",
-                "msg": "no such user"
-            })),
+            utils::gen_response(1, "no such user"),
         ),
     }
 }

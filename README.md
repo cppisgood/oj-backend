@@ -1,8 +1,10 @@
+# build
+
+`make build`
+
 # run
 
-```shell
-cargo run --bin oj-backend
-```
+`make run`
 
 # TODO
 

@@ -5,7 +5,7 @@ use axum::{
     async_trait,
     extract::{Extension, FromRequest, RequestParts},
     http::StatusCode,
-    Json, Router, routing::{post, delete},
+    Json, Router, routing,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -13,6 +13,7 @@ use tower_cookies::Cookies;
 
 pub mod login;
 pub mod logout;
+pub mod current_user;
 
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
@@ -65,6 +66,7 @@ where
 
 pub fn get_router() -> Router {
     Router::new()
-        .route("/login", post(login::login_handler))
-        .route("/logout", delete(logout::logout_handler))
+        .route("/login", routing::post(login::login_handler))
+        .route("/logout", routing::delete(logout::logout_handler))
+        .route("/current", routing::get(current_user::current_user_handler))
 }

@@ -7,10 +7,11 @@ use axum::{
 };
 use axum_csrf::CsrfToken;
 use bson::{doc, Document};
-use chrono::Duration;
+use chrono::{Duration, Local};
 use config::Config;
 use mongodb::Database;
 use serde::Deserialize;
+use serde_json::json;
 use tower_cookies::Cookies;
 
 #[derive(Deserialize, Debug)]
@@ -23,7 +24,7 @@ pub struct LoginUser {
 pub async fn login_handler(
     _token: CsrfToken,
     Json(user): Json<LoginUser>,
-    cookie: Cookies,
+    cookies: Cookies,
     Extension(config): Extension<Config>,
     Extension(mongo): Extension<Database>,
     Extension(session_store): Extension<RedisSessionStore>,
@@ -55,12 +56,15 @@ pub async fn login_handler(
                 let session = utils::gen_session(&[("username", &user.username)], ttl);
                 println!("{}", user.username);
 
-                let session_cookie =
+                let cookie =
                     utils::sotre_session_and_gen_cookie(session_store.clone(), session, ttl).await;
-                cookie.add(session_cookie);
+                cookies.add(cookie);
                 println!("{:?} {:?}", user, session_store.count().await);
 
-                (StatusCode::OK, utils::gen_response(0, "succsess"))
+                (StatusCode::OK, utils::gen_response(0, json!({
+                    "username": user.username,
+                    "expire_time": (Local::now() + Duration::from_std(ttl).unwrap()).timestamp()
+                })))
             } else {
                 (
                     StatusCode::UNAUTHORIZED,

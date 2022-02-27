@@ -1,18 +1,22 @@
-use crate::utils;
+use crate::{logged_user::LoggedUser, utils};
 use async_redis_session::RedisSessionStore;
+use async_session::SessionStore;
 use axum::{
     extract::Extension,
     http::StatusCode,
     response::{IntoResponse, Json},
+    routing, Router,
 };
 use axum_csrf::CsrfToken;
 use bson::{doc, Document};
 use chrono::{Duration, Local};
 use config::Config;
+use cookie::Cookie;
 use mongodb::Database;
 use serde::Deserialize;
 use serde_json::json;
 use tower_cookies::Cookies;
+use tracing::debug;
 
 #[derive(Deserialize, Debug)]
 pub struct LoginUser {
@@ -54,17 +58,25 @@ pub async fn login_handler(
                 .unwrap();
 
                 let session = utils::gen_session(&[("username", &user.username)], ttl);
-                println!("{}", user.username);
+                debug!("{}", user.username);
 
                 let cookie =
                     utils::sotre_session_and_gen_cookie(session_store.clone(), session, ttl).await;
                 cookies.add(cookie);
-                println!("{:?} {:?}", user, session_store.count().await);
+                let _ = async {
+                    debug!("{:?} {:?}", user, session_store.count().await);
+                };
 
-                (StatusCode::OK, utils::gen_response(0, json!({
-                    "username": user.username,
-                    "expire_time": (Local::now() + Duration::from_std(ttl).unwrap()).timestamp()
-                })))
+                (
+                    StatusCode::OK,
+                    utils::gen_response(
+                        0,
+                        json!({
+                            "username": user.username,
+                            "expire_time": (Local::now() + Duration::from_std(ttl).unwrap()).timestamp()
+                        }),
+                    ),
+                )
             } else {
                 (
                     StatusCode::UNAUTHORIZED,
@@ -77,4 +89,33 @@ pub async fn login_handler(
             utils::gen_response(1, "no such user"),
         ),
     }
+}
+
+pub async fn logout_handler(
+    _token: CsrfToken,
+    cookies: Cookies,
+    user: LoggedUser,
+    Extension(store): Extension<RedisSessionStore>,
+) -> impl IntoResponse {
+    cookies.remove(Cookie::build("session_id", "").path("/").finish());
+    if let Some(session) = store.load_session(user.session_id).await.unwrap() {
+        store.destroy_session(session).await.unwrap();
+        (StatusCode::OK, utils::gen_response(0, "bye"))
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            utils::gen_response(1, "not logged yet"),
+        )
+    }
+}
+
+pub fn get_router() -> Router {
+    Router::new()
+        .route("/login", routing::post(login_handler))
+        .route("/logout", routing::delete(logout_handler))
+        .route("/current", routing::get(current_user_handler))
+}
+
+pub async fn current_user_handler(_token: CsrfToken, user: LoggedUser) -> impl IntoResponse {
+    return utils::gen_response(0, &user.username);
 }

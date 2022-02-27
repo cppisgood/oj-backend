@@ -4,13 +4,20 @@ use axum::{
     AddExtensionLayer, Router,
 };
 use axum_csrf::{CsrfConfig, CsrfLayer, CsrfToken};
-use oj_backend::{auth, config, db, user};
+use dotenv;
+use oj_backend::{auth, captcha, config, db, user};
 use std::{collections::HashMap, net::SocketAddr};
 use tower_cookies::{self, CookieManagerLayer};
 use tower_http::cors::{CorsLayer, Origin};
+use tracing::debug;
+use tracing_subscriber::fmt;
 
 #[tokio::main]
 async fn main() {
+    dotenv::dotenv().ok();
+    fmt::init();
+    debug!("start");
+
     let config = config::get_config();
     let mongo = db::get_mongo_client().await.database("oj-test");
     let session_store = db::get_redis_store();
@@ -31,6 +38,7 @@ async fn main() {
 
     let app = Router::new().nest("/auth", auth::get_router());
     let app = app.merge(Router::new().nest("/user", user::get_router()));
+    let app = app.merge(Router::new().nest("/captcha", captcha::get_router()));
 
     let app = Router::new()
         .nest("/api", app)
@@ -51,11 +59,11 @@ async fn main() {
 
 #[allow(dead_code)]
 async fn test_handler(token: CsrfToken, Query(params): Query<HashMap<String, String>>) {
-    println!("{:?}", params);
+    debug!("{:?}", params);
     if let Some(csrftoken) = params.get("token") {
         match token.verify(csrftoken) {
-            Ok(_) => println!("ok"),
-            Err(_) => println!("no"),
+            Ok(_) => debug!("ok"),
+            Err(_) => debug!("no"),
         }
     }
 }

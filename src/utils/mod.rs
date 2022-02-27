@@ -7,7 +7,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::time::Duration;
 use time;
-// use tower_cookies::Cookie;
 
 pub fn verify_password<'a>(password: &str, hash: &str) -> bool {
     argon2::verify_encoded(hash, password.as_bytes()).eq(&Ok(true))
@@ -45,7 +44,7 @@ pub async fn sotre_session_and_gen_cookie(
         .max_age(time::Duration::try_from(ttl).unwrap())
         .same_site(SameSite::Strict)
         .http_only(true)
-        .secure(true)
+        // .secure(true)
         .path("/")
         .finish()
 }

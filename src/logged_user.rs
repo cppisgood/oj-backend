@@ -5,21 +5,16 @@ use axum::{
     async_trait,
     extract::{Extension, FromRequest, RequestParts},
     http::StatusCode,
-    Json, Router, routing,
+    Json,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use tower_cookies::Cookies;
 
-pub mod login;
-pub mod logout;
-pub mod current_user;
-
-#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 pub struct LoggedUser {
-    username: String,
-    session_id: String,
+    pub username: String,
+    pub session_id: String,
 }
 
 #[async_trait]
@@ -61,12 +56,4 @@ where
             )),
         }
     }
-}
-
-
-pub fn get_router() -> Router {
-    Router::new()
-        .route("/login", routing::post(login::login_handler))
-        .route("/logout", routing::delete(logout::logout_handler))
-        .route("/current", routing::get(current_user::current_user_handler))
 }

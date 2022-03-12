@@ -5,7 +5,7 @@ use axum::{
 };
 use axum_csrf::{CsrfConfig, CsrfLayer, CsrfToken};
 use dotenv;
-use oj_backend::{auth, captcha, config, db, user};
+use oj_backend::{auth, captcha, config, db, user, image, problem};
 use std::{collections::HashMap, net::SocketAddr};
 use tower_cookies::{self, CookieManagerLayer};
 use tower_http::cors::{CorsLayer, Origin};
@@ -39,6 +39,8 @@ async fn main() {
     let app = Router::new().nest("/auth", auth::get_router());
     let app = app.merge(Router::new().nest("/user", user::get_router()));
     let app = app.merge(Router::new().nest("/captcha", captcha::get_router()));
+    let app = app.merge(Router::new().nest("/image", image::get_router()));
+    let app = app.merge(Router::new().nest("/problem", problem::get_router()));
 
     let app = Router::new()
         .nest("/api", app)

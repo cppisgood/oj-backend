@@ -8,6 +8,7 @@ use tracing::debug;
 pub enum Action {
     Read,
     Write,
+    Add,
     Delete,
 }
 #[derive(Debug)]
@@ -58,8 +59,18 @@ pub async fn check(
                 Action::Read => Ok(()),
                 Action::Write => (user == username).then(|| ()).ok_or("".into()),
                 Action::Delete => Err("".into()),
+                Action::Add => Ok(()),
             },
-            Resource::Problem(_pid) => todo!(),
+            Resource::Problem(_pid) => match action {
+                Action::Read => todo!(),
+                Action::Write => todo!(),
+                Action::Add => roles
+                    .iter()
+                    .any(|role| role == "root" || role == "admin")
+                    .then(|| ())
+                    .ok_or("".into()),
+                Action::Delete => todo!(),
+            },
             Resource::Contest(_cid) => todo!(),
             Resource::Submission(_sid) => todo!(),
             Resource::Blog(_bid) => todo!(),

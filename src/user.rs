@@ -13,6 +13,7 @@ use axum::{
 };
 use axum_csrf::CsrfToken;
 use bson::{doc, Document};
+use config::Config;
 use mongodb::{
     options::FindOneOptions,
     results::{DeleteResult, UpdateResult},
@@ -30,6 +31,11 @@ pub struct RegisterUser {
     captcha: String,
 }
 
+/// create a new user and store into database
+///
+/// please get [`captcha`](crate::captcha) before register
+///
+/// http method: post
 pub async fn register_handler(
     _token: CsrfToken,
     cookie: Cookies,
@@ -94,6 +100,7 @@ pub async fn register_handler(
 
 pub async fn user_handler(
     Path(username): Path<String>,
+    Extension(config): Extension<Config>,
     Extension(mongo): Extension<Database>,
 ) -> impl IntoResponse {
     let user = mongo
@@ -112,7 +119,15 @@ pub async fn user_handler(
         .await
         .unwrap();
     match user {
-        Some(user) => (StatusCode::OK, utils::gen_response(0, user)),
+        Some(mut user) => {
+            debug!("{:?}", user);
+            if let Err(_) = user.get_str("avatar") {
+                user.insert("avatar", config.get_str("default_avatar").unwrap());
+            }
+            debug!("{:?}", user);
+
+            (StatusCode::OK, utils::gen_response(0, user))
+        }
         None => (
             StatusCode::NOT_FOUND,
             utils::gen_response(1, "no such user"),

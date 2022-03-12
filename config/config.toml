@@ -1,2 +1,5 @@
 session_ttl = 24 # hour
 session_long_ttl = 30 # day
+
+images_path = "./public/images/"
+default_avatar = "default_avatar.png"

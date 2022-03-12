@@ -3,10 +3,19 @@ use async_redis_session::RedisSessionStore;
 use async_session::{Session, SessionStore};
 use axum::Json;
 use cookie::{Cookie, SameSite};
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::time::Duration;
 use time;
+
+pub fn gen_random_string(len: usize) -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(len)
+        .map(char::from)
+        .collect()
+}
 
 pub fn verify_password<'a>(password: &str, hash: &str) -> bool {
     argon2::verify_encoded(hash, password.as_bytes()).eq(&Ok(true))

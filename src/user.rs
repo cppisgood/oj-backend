@@ -1,5 +1,6 @@
 use crate::{
-    logged_user::LoggedUser,
+    auth::LoggedUser,
+    db,
     rbac::{self, Action, Resource},
     utils,
 };
@@ -14,11 +15,7 @@ use axum::{
 use axum_csrf::CsrfToken;
 use bson::{doc, Document};
 use config::Config;
-use mongodb::{
-    options::FindOneOptions,
-    results::{DeleteResult, UpdateResult},
-    Database,
-};
+use mongodb::Database;
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use tracing::debug;
@@ -54,7 +51,18 @@ pub async fn register_handler(
             {
                 Some(session) => {
                     debug!("{:?}", session);
-                    let captcha: String = session.get("captcha").unwrap();
+                    let captcha: String = {
+                        match session.get("captcha") {
+                            Some(captcha) => captcha,
+                            None => {
+                                return (
+                                    StatusCode::BAD_REQUEST,
+                                    utils::gen_response(4, "get captcha first"),
+                                )
+                            }
+                        }
+                    };
+
                     debug!("{} {}", user.captcha, captcha);
                     if user.captcha.to_lowercase() == captcha.to_lowercase() {
                         let res = mongo
@@ -64,6 +72,7 @@ pub async fn register_handler(
                                     "username": user.username,
                                     "password": utils::hash_password(&user.password),
                                     "email": user.email,
+                                    "roles": ["normal"]
                                 },
                                 None,
                             )
@@ -71,7 +80,7 @@ pub async fn register_handler(
                         match res {
                             Ok(_) => {
                                 store.destroy_session(session).await.unwrap();
-                                (StatusCode::OK, utils::gen_response(0, "succsess"))
+                                (StatusCode::OK, utils::gen_response(0, "success"))
                             }
                             Err(_) => (
                                 StatusCode::BAD_REQUEST,
@@ -81,13 +90,13 @@ pub async fn register_handler(
                     } else {
                         (
                             StatusCode::BAD_REQUEST,
-                            utils::gen_response(1, "wrong captcha"),
+                            utils::gen_response(2, "wrong captcha"),
                         )
                     }
                 }
                 None => (
                     StatusCode::UNAUTHORIZED,
-                    utils::gen_response(2, "bad `session_id`"),
+                    utils::gen_response(3, "bad `session_id`"),
                 ),
             }
         }
@@ -103,21 +112,20 @@ pub async fn user_handler(
     Extension(config): Extension<Config>,
     Extension(mongo): Extension<Database>,
 ) -> impl IntoResponse {
-    let user = mongo
-        .collection::<Document>("users")
-        .find_one(
-            doc! {
-                "username": &username
-            },
-            FindOneOptions::builder()
-                .projection(doc! {
-                    "password": 0,
-                    "_id": 0
-                })
-                .build(),
-        )
-        .await
-        .unwrap();
+    let user = db::find_one(
+        &mongo,
+        "users",
+        doc! {
+            "username": &username
+        },
+        doc! {
+            "_id": 0,
+            "password": 0
+        },
+        None,
+    )
+    .await;
+
     match user {
         Some(mut user) => {
             debug!("{:?}", user);
@@ -149,17 +157,16 @@ pub async fn delete_user_handler(
     .await
     .is_ok()
     {
-        let DeleteResult { deleted_count, .. } = mongo
-            .collection::<Document>("users")
-            .delete_one(
-                doc! {
-                    "username": &username,
-                },
-                None,
-            )
-            .await
-            .unwrap();
-        if deleted_count == 1 {
+        let res = db::delete_one(
+            &mongo,
+            "users",
+            doc! {
+                "username": &username
+            },
+        )
+        .await;
+
+        if res.is_ok() {
             (StatusCode::OK, utils::gen_response(0, "success"))
         } else {
             (
@@ -177,37 +184,34 @@ pub async fn delete_user_handler(
 
 pub async fn update_user_handler(
     logged_user: LoggedUser,
+    Path(username): Path<String>,
     Json(user): Json<Document>,
     Extension(mongo): Extension<Database>,
 ) -> impl IntoResponse {
-    debug!("{} {}", user, user.get_str("username").unwrap());
-    let d = doc! {"username": "myname"};
-    let s = d.get_str("username").unwrap();
-    debug!("{} {}", d, s);
     if rbac::check(
         &logged_user.username,
-        Resource::User(user.get_str("username").unwrap().to_string()),
+        Resource::User(username.clone()),
         Action::Write,
         &mongo,
     )
     .await
     .is_ok()
     {
-        let UpdateResult { matched_count, .. } = mongo
-            .collection::<Document>("users")
-            .update_one(
-                doc! {
-                    "username": user.get_str("username").unwrap()
-                },
-                doc! {
-                    "$set": user
-                },
-                None,
-            )
-            .await
-            .unwrap();
+        let res = db::update_one(
+            &mongo,
+            "users",
+            doc! {
+                "username": username
+            },
+            doc! {
+                "$set": user
+            },
+            None,
+        )
+        .await;
+        debug!("{:?}", res);
 
-        if matched_count == 1 {
+        if res.is_ok() {
             (StatusCode::OK, utils::gen_response(0, "success"))
         } else {
             (
@@ -226,7 +230,7 @@ pub async fn update_user_handler(
 pub fn get_router() -> Router {
     Router::new()
         .route("/", routing::post(register_handler))
-        .route("/", routing::patch(update_user_handler))
+        .route("/:username", routing::patch(update_user_handler))
         .route("/:username", routing::get(user_handler))
         .route("/:username", routing::delete(delete_user_handler))
 }

@@ -3,7 +3,6 @@ pub mod captcha;
 pub mod config;
 pub mod db;
 pub mod image;
-pub mod logged_user;
 pub mod problem;
 pub mod rbac;
 pub mod user;

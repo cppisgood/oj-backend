@@ -1,22 +1,96 @@
-use crate::{logged_user::LoggedUser, utils};
+use crate::{db, utils};
 use async_redis_session::RedisSessionStore;
 use async_session::SessionStore;
 use axum::{
-    extract::Extension,
+    async_trait,
+    extract::{Extension, FromRequest, RequestParts},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing, Router,
 };
 use axum_csrf::CsrfToken;
-use bson::{doc, Document};
+use bson::doc;
 use chrono::{Duration, Local};
 use config::Config;
 use cookie::Cookie;
 use mongodb::Database;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use tower_cookies::Cookies;
 use tracing::debug;
+
+#[derive(Deserialize, Debug)]
+pub struct LoggedUser {
+    pub username: String,
+    pub session_id: String,
+}
+
+#[async_trait]
+impl<B> FromRequest<B> for LoggedUser
+where
+    B: Send,
+{
+    type Rejection = (StatusCode, Json<Value>);
+
+    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+        let Extension(store) = Extension::<RedisSessionStore>::from_request(req)
+            .await
+            .expect("`RedisSessionStore` extension missing");
+
+        let cookie = Cookies::from_request(req).await.unwrap();
+
+        let session_id = cookie.get("session_id");
+        match session_id {
+            Some(session_id) => match store
+                .load_session(session_id.value().to_string())
+                .await
+                .unwrap()
+            {
+                Some(session) => {
+                    let username: String = session.get("username").unwrap();
+                    Ok(Self {
+                        username,
+                        session_id: session_id.value().to_string(),
+                    })
+                }
+                None => Err((
+                    StatusCode::UNAUTHORIZED,
+                    utils::gen_response(1, "login required"),
+                )),
+            },
+            None => Err((
+                StatusCode::UNAUTHORIZED,
+                utils::gen_response(1, "login required"),
+            )),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct CheckUser {
+    pub username: String,
+}
+
+#[async_trait]
+impl<B> FromRequest<B> for CheckUser
+where
+    B: Send,
+{
+    type Rejection = (StatusCode, Json<Value>);
+
+    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+        let res = LoggedUser::from_request(req).await;
+
+        Ok(match res {
+            Ok(user) => CheckUser {
+                username: user.username,
+            },
+            Err(_) => CheckUser {
+                username: "NORMAL".to_string(),
+            },
+        })
+    }
+}
 
 #[derive(Deserialize, Debug)]
 pub struct LoginUser {
@@ -33,16 +107,16 @@ pub async fn login_handler(
     Extension(mongo): Extension<Database>,
     Extension(session_store): Extension<RedisSessionStore>,
 ) -> impl IntoResponse {
-    let data = mongo
-        .collection::<Document>("users")
-        .find_one(
-            doc! {
-                "username": &user.username,
-            },
-            None,
-        )
-        .await
-        .unwrap();
+    let data = db::find_one(
+        &mongo,
+        "users",
+        doc! {
+            "username": &user.username
+        },
+        None,
+        None,
+    )
+    .await;
 
     match data {
         Some(data) => {

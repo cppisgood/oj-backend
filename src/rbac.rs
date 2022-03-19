@@ -1,8 +1,10 @@
 use std::error::Error;
 
-use bson::{doc, Document};
-use mongodb::{options::FindOneOptions, Database};
+use bson::doc;
+use mongodb::Database;
 use tracing::debug;
+
+use crate::db;
 
 #[derive(Debug)]
 pub enum Action {
@@ -29,20 +31,21 @@ pub async fn check(
 ) -> Result<(), Box<dyn Error>> {
     debug!("{} {:?} {:?}", username, resource, action);
     let roles = {
-        let user = mongo
-            .collection::<Document>("users")
-            .find_one(
-                doc! {
-                    "username": username,
-                },
-                FindOneOptions::builder()
-                    .projection(doc! {
-                        "roles": 1
-                    })
-                    .build(),
-            )
-            .await?
-            .unwrap();
+        let user = db::find_one(
+            &mongo,
+            "users",
+            doc! {
+                "username": username
+            },
+            doc! {
+                "_id": 0,
+                "roles": 1
+            },
+            None,
+        )
+        .await
+        .expect("logged user not found in database");
+
         debug!("{}", user);
         user.get_array("roles")
             .unwrap_or(&vec![])
@@ -54,26 +57,58 @@ pub async fn check(
     if roles.iter().any(|role| role == "root") {
         Ok(())
     } else {
-        match resource {
-            Resource::User(user) => match action {
+        if let Resource::User(user) = resource {
+            match action {
                 Action::Read => Ok(()),
                 Action::Write => (user == username).then(|| ()).ok_or("".into()),
                 Action::Delete => Err("".into()),
                 Action::Add => Ok(()),
-            },
-            Resource::Problem(_pid) => match action {
-                Action::Read => todo!(),
-                Action::Write => todo!(),
-                Action::Add => roles
-                    .iter()
-                    .any(|role| role == "root" || role == "admin")
-                    .then(|| ())
-                    .ok_or("".into()),
-                Action::Delete => todo!(),
-            },
-            Resource::Contest(_cid) => todo!(),
-            Resource::Submission(_sid) => todo!(),
-            Resource::Blog(_bid) => todo!(),
+            }
+        } else {
+            if roles.iter().any(|role| role == "admin") {
+                Ok(())
+            } else {
+                match resource {
+                    Resource::Problem(problem_id) => {
+                        let (creator, visible) = {
+                            let res = db::find_one(
+                                &mongo,
+                                "problems",
+                                doc! {
+                                    "problem_id": problem_id
+                                },
+                                doc! {
+                                    "_id": 0,
+                                    "creator": 1,
+                                    "visible": 1
+                                },
+                                None,
+                            )
+                            .await.ok_or("")?;
+
+                            (res.get_str("creator")?.to_owned(), res.get_bool("visible")?)
+                        };
+                        debug!("{} {}", creator, visible);
+
+                        match action {
+                            Action::Read => (creator == username || visible)
+                                .then(|| ())
+                                .ok_or("".into()),
+                            Action::Write => (creator == username).then(|| ()).ok_or("".into()),
+                            Action::Add => roles
+                                .iter()
+                                .any(|role| role == "author")
+                                .then(|| ())
+                                .ok_or("".into()),
+                            Action::Delete => Err("".into()),
+                        }
+                    }
+                    Resource::Contest(_) => todo!(),
+                    Resource::Submission(_) => todo!(),
+                    Resource::Blog(_) => todo!(),
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 }

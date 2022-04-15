@@ -8,7 +8,6 @@ use axum::{
     response::{IntoResponse, Json},
     routing, Router,
 };
-use axum_csrf::CsrfToken;
 use bson::doc;
 use chrono::{Duration, Local};
 use config::Config;
@@ -47,11 +46,18 @@ where
                 .unwrap()
             {
                 Some(session) => {
-                    let username: String = session.get("username").unwrap();
-                    Ok(Self {
-                        username,
-                        session_id: session_id.value().to_string(),
-                    })
+                    debug!("{:?}", session);
+                    let username = session.get("username");
+                    match username {
+                        Some(username) => Ok(Self {
+                            username,
+                            session_id: session_id.value().to_string(),
+                        }),
+                        None => Err((
+                            StatusCode::UNAUTHORIZED,
+                            utils::gen_response(1, "login required"),
+                        )),
+                    }
                 }
                 None => Err((
                     StatusCode::UNAUTHORIZED,
@@ -86,7 +92,7 @@ where
                 username: user.username,
             },
             Err(_) => CheckUser {
-                username: "NORMAL".to_string(),
+                username: "UNLOGGED".to_string(),
             },
         })
     }
@@ -100,7 +106,6 @@ pub struct LoginUser {
 }
 
 pub async fn login_handler(
-    _token: CsrfToken,
     Json(user): Json<LoginUser>,
     cookies: Cookies,
     Extension(config): Extension<Config>,
@@ -166,7 +171,6 @@ pub async fn login_handler(
 }
 
 pub async fn logout_handler(
-    _token: CsrfToken,
     cookies: Cookies,
     user: LoggedUser,
     Extension(store): Extension<RedisSessionStore>,
@@ -190,6 +194,6 @@ pub fn get_router() -> Router {
         .route("/current", routing::get(current_user_handler))
 }
 
-pub async fn current_user_handler(_token: CsrfToken, user: LoggedUser) -> impl IntoResponse {
+pub async fn current_user_handler(user: LoggedUser) -> impl IntoResponse {
     return utils::gen_response(0, &user.username);
 }

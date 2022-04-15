@@ -1,6 +1,5 @@
 use async_redis_session::RedisSessionStore;
 use axum::{extract::Extension, response::IntoResponse, routing, Router};
-use axum_csrf::CsrfToken;
 use captcha::{filters::Noise, Captcha};
 use chrono::Duration;
 use tower_cookies::Cookies;
@@ -21,7 +20,6 @@ fn get_captcha() -> (String, String) {
 }
 
 pub async fn captcha_handler(
-    _token: CsrfToken,
     cookies: Cookies,
     Extension(store): Extension<RedisSessionStore>,
 ) -> impl IntoResponse {

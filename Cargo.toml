@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { version = "^0.4.5", features = ["headers", "multipart"] }
+axum = { version = "^0.5.0", features = ["headers", "multipart"] }
 async-session = "^3.0.0"
 tokio = { version = "^1.16.1", features = ["full"] }
 dotenv = "^0.15.0"
@@ -14,19 +14,21 @@ chrono = "^0.4.19"
 async-redis-session = "^0.2.2"
 serde = "^1.0.136"
 serde_json = "^1.0.79"
-axum_csrf = "^0.2.0"
 rust-argon2 = "^1.0.0"
-rand = "^0.8.4"
-tower-cookies = "^0.5.0"
+rand = "^0.8.5"
+tower-cookies = "^0.6.0"
 mongodb = "^2.1.0"
 bson = "^2.1.0"
 time = "^0.3.7"
-config = "^0.11.0"
+config = "^0.13.0"
 tracing = "^0.1.30"
 tracing-subscriber = "^0.3.8"
-tower-http = { version = "^0.2.2", features = ["cors"] }
+tower-http = { version = "^0.2.5", features = ["cors"] }
 cookie = "^0.16.0"
 captcha = "^0.0.8"
 mime = "^0.3.16"
 mime_guess = "^2.0.4"
 futures = "^0.3.21"
+nats = "^0.18.1"
+axum-macros = "^0.2.0"
+oj-judger = { git = "ssh://git@github.com/cppisgood/oj-judger.git", branch = "main" }

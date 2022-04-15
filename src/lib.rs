@@ -1,9 +1,13 @@
 pub mod auth;
 pub mod captcha;
 pub mod config;
+pub mod contest;
+pub mod counter;
 pub mod db;
 pub mod image;
+pub mod language;
 pub mod problem;
 pub mod rbac;
+pub mod submission;
 pub mod user;
 pub mod utils;

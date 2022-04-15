@@ -3,3 +3,18 @@ session_long_ttl = 30 # day
 
 images_path = "./public/images/"
 default_avatar = "default_avatar.png"
+
+[nats]
+judge_queue_subject = "judge_queue"
+reply_subject = "reply"
+
+[language]
+
+[language."cpp"]
+src_file_name = "main.cpp"
+compile_cmd = "/bin/g++ -DNINGOJ -DONLINEJUDGE -DONLINE_JUDGE -fmax-errors=1 -std=c++23 -o main main.cpp"
+run_cmd = "./main"
+
+[language.python3]
+src_file_name = "main.py"
+run_cmd = "/bin/python3 main.py"

@@ -30,7 +30,7 @@ pub async fn check(
     mongo: &Database,
 ) -> Result<(), Box<dyn Error>> {
     debug!("{} {:?} {:?}", username, resource, action);
-    let roles = {
+    let (roles, contest_passwords) = {
         let user = db::find_one(
             &mongo,
             "users",
@@ -39,7 +39,8 @@ pub async fn check(
             },
             doc! {
                 "_id": 0,
-                "roles": 1
+                "roles": 1,
+                "contest_passwords": 1
             },
             None,
         )
@@ -47,11 +48,24 @@ pub async fn check(
         .expect("logged user not found in database");
 
         debug!("{}", user);
-        user.get_array("roles")
-            .unwrap_or(&vec![])
-            .into_iter()
-            .map(|role| role.as_str().unwrap().to_string())
-            .collect::<Vec<_>>()
+        (
+            user.get_array("roles")
+                .unwrap_or(&vec![])
+                .into_iter()
+                .map(|role| role.as_str().unwrap().to_string())
+                .collect::<Vec<_>>(),
+            user.get_array("contest_passwords")
+                .unwrap_or(&vec![])
+                .into_iter()
+                .map(|contest_password| {
+                    let contest_password = contest_password.as_document().unwrap();
+                    (
+                        contest_password.get_str("contest_id").unwrap().to_owned(),
+                        contest_password.get_str("password").unwrap().to_owned(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     };
 
     if roles.iter().any(|role| role == "root") {
@@ -84,7 +98,8 @@ pub async fn check(
                                 },
                                 None,
                             )
-                            .await.ok_or("")?;
+                            .await
+                            .ok_or("")?;
 
                             (res.get_str("creator")?.to_owned(), res.get_bool("visible")?)
                         };
@@ -103,9 +118,78 @@ pub async fn check(
                             Action::Delete => Err("".into()),
                         }
                     }
-                    Resource::Contest(_) => todo!(),
-                    Resource::Submission(_) => todo!(),
-                    Resource::Blog(_) => todo!(),
+                    Resource::Contest(contest_id) => match action {
+                        Action::Read => {
+                            let contest_password = db::find_one(
+                                &mongo,
+                                "contests",
+                                doc! {
+                                    "contest_id": &contest_id
+                                },
+                                doc! {
+                                    "_id": 0,
+                                    "password": 1
+                                },
+                                None,
+                            )
+                            .await
+                            .unwrap();
+
+                            debug!("contest: {:?}", contest_password);
+                            if let Ok(password) = contest_password.get_str("password") {
+                                debug!("password: {:?}", password);
+                                contest_passwords
+                                    .iter()
+                                    .any(|(contest_id_, password_)| {
+                                        contest_id_ == &contest_id && password_ == password
+                                    })
+                                    .then(|| ())
+                                    .ok_or("".into())
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        Action::Write => Err("".into()),
+                        Action::Add => Err("".into()),
+                        Action::Delete => Err("".into()),
+                    },
+                    Resource::Submission(submission_id) => {
+                        let (creator, visible) = {
+                            let res = db::find_one(
+                                &mongo,
+                                "submissions",
+                                doc! {
+                                    "submission_id": &submission_id
+                                },
+                                doc! {
+                                    "_id": 0,
+                                    "creator": 1,
+                                    "visible": 1
+                                },
+                                None,
+                            )
+                            .await
+                            .ok_or("")?;
+                            (
+                                res.get_str("creator")?.to_string(),
+                                res.get_bool("visible")?,
+                            )
+                        };
+                        // TODO let author see user submissions of owned problem
+                        match action {
+                            Action::Read => (visible || &creator == username)
+                                .then(|| ())
+                                .ok_or("".into()),
+                            Action::Write => (&creator == username).then(|| ()).ok_or("".into()),
+                            Action::Add => roles
+                                .iter()
+                                .all(|role| role != "UNLOGGED")
+                                .then(|| ())
+                                .ok_or("".into()),
+                            Action::Delete => Err("".into()),
+                        }
+                    }
+                    Resource::Blog(_) => Err("".into()),
                     _ => unreachable!(),
                 }
             }

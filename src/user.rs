@@ -12,7 +12,6 @@ use axum::{
     response::IntoResponse,
     routing, Json, Router,
 };
-use axum_csrf::CsrfToken;
 use bson::{doc, Document};
 use config::Config;
 use mongodb::Database;
@@ -34,7 +33,6 @@ pub struct RegisterUser {
 ///
 /// http method: post
 pub async fn register_handler(
-    _token: CsrfToken,
     cookie: Cookies,
     Json(user): Json<RegisterUser>,
     Extension(store): Extension<RedisSessionStore>,
@@ -65,6 +63,13 @@ pub async fn register_handler(
 
                     debug!("{} {}", user.captcha, captcha);
                     if user.captcha.to_lowercase() == captcha.to_lowercase() {
+                        // let res = db::insert_one(&mongo, "users", doc! {
+                        //     "username": user.username,
+                        //     "password": utils::hash_password(&user.password),
+                        //     "email": user.email,
+                        //     "roles": ["normal"]
+                        // }).await;
+
                         let res = mongo
                             .collection("users")
                             .insert_one(
@@ -80,6 +85,7 @@ pub async fn register_handler(
                         match res {
                             Ok(_) => {
                                 store.destroy_session(session).await.unwrap();
+                                // store.destroy_session(session).await.unwrap();
                                 (StatusCode::OK, utils::gen_response(0, "success"))
                             }
                             Err(_) => (
@@ -130,7 +136,7 @@ pub async fn user_handler(
         Some(mut user) => {
             debug!("{:?}", user);
             if let Err(_) = user.get_str("avatar") {
-                user.insert("avatar", config.get_str("default_avatar").unwrap());
+                user.insert("avatar", config.get_string("default_avatar").unwrap());
             }
             debug!("{:?}", user);
 

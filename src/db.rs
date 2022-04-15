@@ -129,6 +129,14 @@ pub async fn find(
     cursor.map(|document| document.unwrap()).collect().await
 }
 
+pub async fn count(mongo: &Database, collection: &str, filter: impl Into<Option<Document>>) -> u64 {
+    mongo
+        .collection::<Document>(collection)
+        .count_documents(filter, None)
+        .await
+        .expect("database error")
+}
+
 #[cfg(test)]
 mod tests {
     use bson::{doc, Document};
@@ -152,21 +160,6 @@ mod tests {
         let db = client.database("test");
 
         let collection = db.collection::<Document>("table1");
-
-        // let result = collection.insert_many(
-        //     [
-        //         doc! {
-        //             "name": "name1",
-        //             "age": 19
-        //         },
-        //         doc! {
-        //             "name": "name2",
-        //             "height": 123
-        //         },
-        //     ],
-        //     None,
-        // ).await.unwrap();
-        // println!("{:?}", result);
 
         let result = collection
             .find_one(

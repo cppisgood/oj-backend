@@ -21,30 +21,31 @@ pub async fn upload_handler(
     Extension(config): Extension<Config>,
 ) -> impl IntoResponse {
     if let Some(field) = multipart.next_field().await.unwrap() {
-        match field.content_type().unwrap().type_() {
-            mime::IMAGE => {
-                let name = format!(
-                    "{}.{}",
-                    utils::gen_random_string(10),
-                    StdPath::new(field.name().unwrap())
-                        .extension()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                );
-                let path = config.get_str("images_path").unwrap() + &name;
-                let data = field.bytes().await.unwrap();
+        let file_type = field.content_type().unwrap();
+        debug!("file type: {}", file_type);
+        if file_type.starts_with("image") {
+            let name = format!(
+                "{}.{}",
+                utils::gen_random_string(10),
+                StdPath::new(field.name().unwrap())
+                    .extension()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            );
+            let path = config.get_string("images_path").unwrap() + &name;
+            let data = field.bytes().await.unwrap();
 
-                let mut f = File::create(&path).unwrap();
-                f.write(&data).unwrap();
+            let mut f = File::create(&path).unwrap();
+            f.write(&data).unwrap();
 
-                debug!("Length of `{}` is {} bytes", name, data.len());
-                (StatusCode::OK, utils::gen_response(0, name))
-            }
-            _ => (
+            debug!("Length of `{}` is {} bytes", name, data.len());
+            (StatusCode::OK, utils::gen_response(0, name))
+        } else {
+            (
                 StatusCode::BAD_REQUEST,
                 utils::gen_response(1, "unexpected file type"),
-            ),
+            )
         }
     } else {
         (
@@ -58,7 +59,7 @@ pub async fn image_handler(
     Path(image_name): Path<String>,
     Extension(config): Extension<Config>,
 ) -> impl IntoResponse {
-    let path = config.get_str("images_path").unwrap() + &image_name;
+    let path = config.get_string("images_path").unwrap() + &image_name;
     let path = StdPath::new(&path);
     debug!("{:?}", path);
 

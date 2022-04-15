@@ -1,9 +1,9 @@
-use config::{Config, File};
+use config::{Config, File, FileFormat};
 
 pub fn get_config() -> Config {
-    let mut config = Config::default();
-    config
-        .merge(vec![File::with_name("config/config.toml")])
+    let config = Config::builder()
+        .add_source(File::new("config/config.toml", FileFormat::Toml))
+        .build()
         .unwrap();
     config
 }

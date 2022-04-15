@@ -26,7 +26,7 @@ pub fn hash_password(password: &str) -> String {
     argon2::hash_encoded(password.as_bytes(), "mylongsalt".as_bytes(), &config).unwrap()
 }
 
-pub fn gen_response<T: Serialize>(code: u32, msg: T) -> Json<Value> {
+pub fn gen_response<T: Serialize>(code: u64, msg: T) -> Json<Value> {
     Json(json!({
         "code": code,
         "msg": json!(msg)
